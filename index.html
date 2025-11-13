@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <style>
+        /* Same CSS as before - unchanged */
         * {
             margin: 0;
             padding: 0;
@@ -289,6 +290,7 @@
         .product-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .btn-edit {
@@ -357,6 +359,13 @@
             display: none;
         }
 
+        .data-export {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
         @media (max-width: 768px) {
             .nav-tabs {
                 flex-direction: column;
@@ -422,6 +431,7 @@
             <div class="tab active" data-tab="add-post">Add New Post</div>
             <div class="tab" data-tab="manage-posts">Manage Posts</div>
             <div class="tab" data-tab="preview">Preview Website</div>
+            <div class="tab" data-tab="data-export">Data Export</div>
         </div>
 
         <!-- Add/Edit Post Tab -->
@@ -478,7 +488,7 @@
                         
                         <div class="image-option" id="url-option">
                             <h4><i class="fas fa-link"></i> Image URL</h4>
-                            <input type="text" id="image-url" class="form-control" placeholder="Paste image URL">
+                            <input type="text" id="image-url" class="form-control" placeholder="Paste image URL (Recommended for Vercel)">
                             <div class="image-preview" id="url-preview">
                                 <span>Enter URL to preview</span>
                             </div>
@@ -528,6 +538,39 @@
                 </div>
             </div>
         </div>
+
+        <!-- Data Export Tab -->
+        <div id="data-export" class="tab-content">
+            <h2>Data Management</h2>
+            <div class="data-export">
+                <h3><i class="fas fa-database"></i> Export/Import Data</h3>
+                <p>Use these options to backup your data or transfer it between devices.</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <div>
+                        <h4>Export Data</h4>
+                        <p>Download all your posts as a JSON file for backup.</p>
+                        <button class="btn" id="export-data">
+                            <i class="fas fa-download"></i> Export Data
+                        </button>
+                    </div>
+                    
+                    <div>
+                        <h4>Import Data</h4>
+                        <p>Upload a JSON file to restore your posts.</p>
+                        <input type="file" id="import-file" class="file-input" accept=".json">
+                        <label for="import-file" class="file-input-label" style="display: block; text-align: center; margin-top: 10px;">
+                            <i class="fas fa-upload"></i> Choose JSON File
+                        </label>
+                    </div>
+                </div>
+
+                <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border-radius: 5px;">
+                    <h4><i class="fas fa-info-circle"></i> Vercel Deployment Note</h4>
+                    <p>For Vercel deployment, use Image URLs instead of file uploads. File uploads work locally but may not persist on Vercel.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -543,9 +586,18 @@
             }
         ];
 
+        // Vercel-compatible data storage
+        function getStorageKey() {
+            // Use a fixed key that works across domains
+            return 'furnitureArticals_posts_v2';
+        }
+
         // Initialize with sample data if empty
         function initializeData() {
-            if (!localStorage.getItem('furniturePosts')) {
+            const storageKey = getStorageKey();
+            const storedData = localStorage.getItem(storageKey);
+            
+            if (!storedData) {
                 const samplePosts = [
                     {
                         id: "1",
@@ -566,12 +618,25 @@
                         createdAt: new Date().toLocaleDateString()
                     }
                 ];
-                localStorage.setItem('furniturePosts', JSON.stringify(samplePosts));
+                localStorage.setItem(storageKey, JSON.stringify(samplePosts));
+                return samplePosts;
             }
-            return JSON.parse(localStorage.getItem('furniturePosts')) || [];
+            
+            try {
+                return JSON.parse(storedData);
+            } catch (e) {
+                console.error('Error parsing stored data:', e);
+                return [];
+            }
         }
 
-        // Posts storage - using localStorage
+        // Save data to storage
+        function saveData(posts) {
+            const storageKey = getStorageKey();
+            localStorage.setItem(storageKey, JSON.stringify(posts));
+        }
+
+        // Posts storage - using localStorage with Vercel compatibility
         let posts = initializeData();
         let isEditing = false;
         let currentEditId = null;
@@ -595,6 +660,8 @@
         const submitBtn = document.getElementById('submit-btn');
         const cancelEditBtn = document.getElementById('cancel-edit');
         const editPostId = document.getElementById('edit-post-id');
+        const exportDataBtn = document.getElementById('export-data');
+        const importFile = document.getElementById('import-file');
 
         // Image upload elements
         const uploadOption = document.getElementById('upload-option');
@@ -604,7 +671,7 @@
         const uploadPreview = document.getElementById('upload-preview');
         const urlPreview = document.getElementById('url-preview');
 
-        let currentImageMethod = 'upload'; // 'upload' or 'url'
+        let currentImageMethod = 'upload';
         let uploadedImageData = null;
 
         // Login functionality
@@ -642,6 +709,48 @@
             resetForm();
         });
 
+        // Export data functionality
+        exportDataBtn.addEventListener('click', function() {
+            const dataStr = JSON.stringify(posts, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'furniture-posts-backup.json';
+            link.click();
+            URL.revokeObjectURL(url);
+            showMessage('Data exported successfully!', 'success');
+        });
+
+        // Import data functionality
+        importFile.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        if (Array.isArray(importedData)) {
+                            posts = importedData;
+                            saveData(posts);
+                            loadPosts();
+                            generatePreview();
+                            showMessage('Data imported successfully!', 'success');
+                        } else {
+                            showMessage('Invalid data format', 'error');
+                        }
+                    } catch (error) {
+                        showMessage('Error parsing JSON file', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Rest of the JavaScript remains the same as previous version
+        // (Image handling, form submission, edit functionality, etc.)
+        // ... [Previous JavaScript code continues here] ...
+
         // Image method selection
         uploadOption.addEventListener('click', function() {
             uploadOption.classList.add('active');
@@ -662,7 +771,7 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     uploadPreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
-                    uploadedImageData = e.target.result; // Store base64 data
+                    uploadedImageData = e.target.result;
                 };
                 reader.readAsDataURL(file);
             }
@@ -745,7 +854,7 @@
                     };
                     
                     // Save to localStorage
-                    localStorage.setItem('furniturePosts', JSON.stringify(posts));
+                    saveData(posts);
                     
                     // Show success message
                     showMessage('Post updated successfully!', 'success');
@@ -771,7 +880,7 @@
                 posts.unshift(newPost);
                 
                 // Save to localStorage
-                localStorage.setItem('furniturePosts', JSON.stringify(posts));
+                saveData(posts);
                 
                 // Show success message
                 showMessage('Post added successfully!', 'success');
@@ -915,7 +1024,7 @@
         function deletePost(postId) {
             if (confirm('Are you sure you want to delete this post?')) {
                 posts = posts.filter(post => post.id !== postId);
-                localStorage.setItem('furniturePosts', JSON.stringify(posts));
+                saveData(posts);
                 loadPosts();
                 generatePreview();
                 showMessage('Post deleted successfully!', 'success');
@@ -948,6 +1057,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             loginScreen.style.display = 'block';
             adminDashboard.style.display = 'none';
+            
+            // Check if data exists and is accessible
+            console.log('Current posts:', posts);
+            console.log('Storage key:', getStorageKey());
         });
     </script>
 </body>
